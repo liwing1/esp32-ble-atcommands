@@ -1,3 +1,10 @@
+# Custom ignores
+*.vs/
+*.vscode/
+*out/
+*build/
+*bin/
+
 # Prerequisites
 *.d
 
@@ -27,7 +34,7 @@
 *.so
 *.so.*
 *.dylib
-
+*.pem
 # Executables
 *.exe
 *.out
@@ -50,4 +57,7 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
-*.vscode/
+
+# Custom
+/sdkconfig
+/sdkconfig.old
