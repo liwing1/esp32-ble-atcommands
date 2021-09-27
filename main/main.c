@@ -88,7 +88,7 @@ static void uart_init(void)
     uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     //Set uart pattern detect function.
-    uart_enable_pattern_det_baud_intr(EX_UART_NUM, '\r', PATTERN_CHR_NUM, 9, 0, 0);
+    uart_enable_pattern_det_baud_intr(EX_UART_NUM, '\n', PATTERN_CHR_NUM, 9, 0, 0);
     //Reset the pattern queue length to record at most 20 pattern positions.
     uart_pattern_queue_reset(EX_UART_NUM, 20);
 }
@@ -110,10 +110,46 @@ static void ble_mesh_config(void)
 uint8_t ble_mesh_parse(const char* data)
 {
     char* token = strstr(data, "\xf1\xdd\x07");
+    uint8_t msg_sens_cmd = 0;
+    uint32_t msg_n_access = 0;
+    uint8_t msg_battery = 0;
 
     if( token != NULL)
     {
-        printf("header\r\n");
+        ble_msg_t* p_rx_data = (ble_msg_t*)data;
+
+        if(p_rx_data->endWord[0] == 0x0d)
+        {
+            printf("MsgBLE:\r\n");
+
+            msg_sens_cmd = p_rx_data->payload[0] ;
+
+            msg_n_access = (p_rx_data->payload[1]<<16 | p_rx_data->payload[2]<<8 | p_rx_data->payload[3]) - (0x7F7F7F);
+
+            msg_battery = (p_rx_data->payload[4]);
+
+            printf("%d\r\n%d\r\n%d\r\n", msg_sens_cmd, msg_n_access, msg_battery);
+        
+        }
+
+        switch( msg_sens_cmd )
+        {
+            case SENSOR_CMD_ACCES:
+            printf("chegou %d pessoas!!\r\n". msg_n_access);
+            break;
+
+            case SENSOR_CMD_EGRESS:
+            printf("saiu gentes!!\r\n");
+            break;
+
+            case SENSOR_CMD_OBSTR:
+            printf("obstruido!!\r\n");
+            break;
+            
+            case SENSOR_CMD_PROVI:
+            printf("provisionamento!!\r\n");
+            break;
+        }
     }
 
     return 0;
@@ -187,7 +223,6 @@ static void uart_event_task(void *pvParameters)
                         uart_read_bytes(EX_UART_NUM, pat, PATTERN_CHR_NUM, 100 / portTICK_PERIOD_MS);
                         ESP_LOGI(TAG, "read data: %s", dtmp);
                         ESP_LOGI(TAG, "read pat : 0x%x", *pat);
-                        printf("%.*s", 14, (char*)&ble_msg_example);
                         ble_mesh_parse((char*)dtmp);
                     }
                     break;

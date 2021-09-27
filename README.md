@@ -7,3 +7,4 @@
 ## Rev1
     - 001: Configura o gateway
     - 002: Criei estrutura de recebimento da mensagem do sensor
+    - 003: Parse da mensagem estrutura basica criada

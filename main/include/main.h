@@ -7,6 +7,11 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 
+#define SENSOR_CMD_ACCES    1
+#define SENSOR_CMD_EGRESS   2
+#define SENSOR_CMD_OBSTR    3
+#define SENSOR_CMD_PROVI    4
+
 typedef struct {
     char header[3];
     char send_addr[2];
