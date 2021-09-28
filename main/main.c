@@ -31,36 +31,33 @@ static const char *TAG = "uart_events";
 
 #define TXD_PIN (GPIO_NUM_4)
 #define RXD_PIN (GPIO_NUM_5)
-static QueueHandle_t uart1_queue;
 
+#define GPIO_BLE_VSOURCE        GPIO_NUM_23
+#define GPIO_OUTPUT_PIN_SEL     (1ULL<<GPIO_BLE_VSOURCE) 
+
+static QueueHandle_t uart1_queue;
 
 static const char *cmd_ble_default = "AT+DEFAULT\r\n";
 static const char *cmd_ble_role5 = "AT+ROLE5\r\n";
 static const char *cmd_ble_netid = "AT+NETID1133\r\n";
 static const char *cmd_ble_maddr = "AT+MADDRFF00\r\n";
 static const char *cmd_ble_reset = "AT+RESET\r\n";
-static const char *cmd_ble_sleep = "AT+SLEEP2\r\n";
+// static const char *cmd_ble_sleep = "AT+SLEEP2\r\n";
 
-static const ble_msg_t ble_msg_example ={
-    .header[0] = 0xf1,
-    .header[1] = 0xdd,
-    .header[2] = 0x07,
 
-    .send_addr[0] = 0x00,
-    .send_addr[1] = 0x88,
+static void pins_init(void)
+{
+    gpio_config_t io_config = {
+        .intr_type      =   GPIO_INTR_DISABLE,
+        .mode           =   GPIO_MODE_OUTPUT,
+        .pin_bit_mask   =   GPIO_OUTPUT_PIN_SEL,
+        .pull_down_en   =   pdFALSE,
+        .pull_up_en     =   pdFALSE,
+    };
+    gpio_config(&io_config);
 
-    .dest_addr[0] = 0xFF,
-    .dest_addr[1] = 0x00,
-
-    .payload[0] = 0x01,
-    .payload[1] = 0x7f,
-    .payload[2] = 0x7f,
-    .payload[3] = 0x80,
-    .payload[4] = 0x1e,
-
-    .endWord[0] = 0x0d,
-    .endWord[1] = 0x0a,
-};
+    gpio_set_level(GPIO_NUM_23, pdTRUE);
+}
 
 
 static void uart_init(void)
@@ -94,16 +91,21 @@ static void uart_init(void)
 }
 
 
-static void ble_mesh_config(void)
+static void ble_config(void)
 {
     uart_write_bytes(EX_UART_NUM, cmd_ble_default, strlen(cmd_ble_default));
-    uart_write_bytes(EX_UART_NUM, cmd_ble_role5, strlen(cmd_ble_role5));
-    uart_write_bytes(EX_UART_NUM, cmd_ble_netid, strlen(cmd_ble_netid));
-    uart_write_bytes(EX_UART_NUM, cmd_ble_maddr, strlen(cmd_ble_maddr));
-    uart_write_bytes(EX_UART_NUM, cmd_ble_reset, strlen(cmd_ble_reset));
-    uart_write_bytes(EX_UART_NUM, cmd_ble_sleep, strlen(cmd_ble_sleep));
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
-    uart_write_bytes(EX_UART_NUM, (char*)&ble_msg_example, 14);
+    uart_write_bytes(EX_UART_NUM, cmd_ble_role5, strlen(cmd_ble_role5));
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    uart_write_bytes(EX_UART_NUM, cmd_ble_netid, strlen(cmd_ble_netid));
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    uart_write_bytes(EX_UART_NUM, cmd_ble_maddr, strlen(cmd_ble_maddr));
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    uart_write_bytes(EX_UART_NUM, cmd_ble_reset, strlen(cmd_ble_reset));
 }
 
 
@@ -135,7 +137,7 @@ uint8_t ble_mesh_parse(const char* data)
         switch( msg_sens_cmd )
         {
             case SENSOR_CMD_ACCES:
-            printf("chegou %d pessoas!!\r\n". msg_n_access);
+            printf("chegou %d pessoas!!\r\n", msg_n_access);
             break;
 
             case SENSOR_CMD_EGRESS:
@@ -240,9 +242,11 @@ static void uart_event_task(void *pvParameters)
 
 void app_main(void)
 {
+    pins_init();
     uart_init();
-    ble_mesh_config();
+    ble_config();
 
     //Create a task to handler UART event from ISR
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
+    // xTaskCreate(ble_config_task, "ble_config_task", 2048, NULL, 05, NULL);
 }
