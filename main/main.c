@@ -6,7 +6,7 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
-#include "main.h"
+#include "accesCounter.h"
 
 static const char *TAG = "uart_events";
 
@@ -44,15 +44,18 @@ static const char *cmd_ble_maddr = "AT+MADDRFF00\r\n";
 static const char *cmd_ble_reset = "AT+RESET\r\n";
 // static const char *cmd_ble_sleep = "AT+SLEEP2\r\n";
 
+static const char *cmd_ble_provisioning = "\x41\x54\x2b\x4d\x45\x53\x48\x41\x00\x02\xE3\xF1\x03\x00\x77\x0D\x0A";
 
-static void pins_init(void)
+static uint16_t nextSensorAddr = 0;
+
+void pins_init(void)
 {
     gpio_config_t io_config = {
         .intr_type      =   GPIO_INTR_DISABLE,
         .mode           =   GPIO_MODE_OUTPUT,
         .pin_bit_mask   =   GPIO_OUTPUT_PIN_SEL,
-        .pull_down_en   =   pdFALSE,
-        .pull_up_en     =   pdFALSE,
+        .pull_down_en   =   GPIO_PULLDOWN_DISABLE,
+        .pull_up_en     =   GPIO_PULLUP_DISABLE,
     };
     gpio_config(&io_config);
 
@@ -60,7 +63,7 @@ static void pins_init(void)
 }
 
 
-static void uart_init(void)
+void uart_init(void)
 {
     esp_log_level_set(TAG, ESP_LOG_INFO);
 
@@ -85,13 +88,13 @@ static void uart_init(void)
     uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     //Set uart pattern detect function.
-    uart_enable_pattern_det_baud_intr(EX_UART_NUM, '\n', PATTERN_CHR_NUM, 9, 0, 0);
+    uart_enable_pattern_det_baud_intr(EX_UART_NUM, '\r', PATTERN_CHR_NUM, 9, 0, 0);
     //Reset the pattern queue length to record at most 20 pattern positions.
     uart_pattern_queue_reset(EX_UART_NUM, 20);
 }
 
 
-static void ble_config(void)
+void ble_config(void)
 {
     uart_write_bytes(EX_UART_NUM, cmd_ble_default, strlen(cmd_ble_default));
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -111,54 +114,99 @@ static void ble_config(void)
 
 uint8_t ble_mesh_parse(const char* data)
 {
-    char* token = strstr(data, "\xf1\xdd\x07");
-    uint8_t msg_sens_cmd = 0;
-    uint32_t msg_n_access = 0;
+    char* tokenHeader = strstr(data, "\xf1\xdd\x07");
+    uint16_t msg_address_sender = 0;
+    uint8_t a_b = 0;
+    uint8_t b_a = 0;
+    ble_cmd_t msg_sens_cmd = 0;
     uint8_t msg_battery = 0;
+    uint8_t obstrucao = 0;
 
-    if( token != NULL)
+    if( tokenHeader != NULL)
     {
-        ble_msg_t* p_rx_data = (ble_msg_t*)data;
+        ble_msg_rx_t* p_rx_data = (ble_msg_rx_t*)data;
 
         if(p_rx_data->endWord[0] == 0x0d)
         {
             printf("MsgBLE:\r\n");
 
-            msg_sens_cmd = p_rx_data->payload[0] ;
+            msg_sens_cmd = p_rx_data->cmd ;
 
-            msg_n_access = (p_rx_data->payload[1]<<16 | p_rx_data->payload[2]<<8 | p_rx_data->payload[3]) - (0x7F7F7F);
+            msg_address_sender = p_rx_data->send_addr;
 
-            msg_battery = (p_rx_data->payload[4]);
+            msg_battery = p_rx_data->battery;
 
-            printf("%d\r\n%d\r\n%d\r\n", msg_sens_cmd, msg_n_access, msg_battery);
+            printf("%d\r\n%d\r\n", msg_sens_cmd, msg_battery);
         
         }
 
         switch( msg_sens_cmd )
         {
-            case SENSOR_CMD_ACCES:
-            printf("chegou %d pessoas!!\r\n", msg_n_access);
+            case SENSOR_CMD_B_A:
+            {
+                b_a = (p_rx_data->payload[1]<<16 | p_rx_data->payload[2]<<8 | p_rx_data->payload[3]) - (0x7F7F7F);
+                printf("chegou %d pessoas!!\r\n", b_a);
+                a_b = 0;
+            }
             break;
 
-            case SENSOR_CMD_EGRESS:
-            printf("saiu gentes!!\r\n");
+            case SENSOR_CMD_A_B:
+            {
+                a_b = (p_rx_data->payload[1]<<16 | p_rx_data->payload[2]<<8 | p_rx_data->payload[3]) - (0x7F7F7F);
+                printf("saiu %d pessoas!!\r\n", a_b);
+                b_a = 0;
+            }
             break;
 
             case SENSOR_CMD_OBSTR:
-            printf("obstruido!!\r\n");
+            {
+                a_b = 0;
+                b_a = 0;
+                obstrucao = 1;
+                printf("obstruido!!\r\n");
+            }
             break;
             
             case SENSOR_CMD_PROVI:
-            printf("provisionamento!!\r\n");
+            {
+                printf("provisionamento!!\r\n");
+                uart_write_bytes(EX_UART_NUM, cmd_ble_provisioning, strlen(cmd_ble_provisioning));
+                
+            }
             break;
         }
+
+        #ifndef _MODE_MAIN_
+        Enviar_Mensagem_Iothub(
+            a_b, 
+            b_a, 
+            0, 
+            msg_battery, 
+            obstrucao, 
+            msg_address_sender
+        );
+        #endif
     }
 
     return 0;
 }
 
+void iniciar_simulador(void *pvParameters)
+{
+    while (1)
+    {
+        // char *simu_data = "\xf1\xdd\x07\x00\x88\xFF\x00\x01\x7F\x7F\x80\x1E\x0d\x0a";
+        // ble_mesh_parse(simu_data);
 
-static void uart_event_task(void *pvParameters)
+        uart_write_bytes(EX_UART_NUM, "at\r\n", strlen("at\r\n"));
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        vTaskDelay(5000/portTICK_PERIOD_MS);
+    }
+}
+
+
+void uart_event_task(void *pvParameters)
 {
     uart_event_t event;
     size_t buffered_size;
@@ -234,12 +282,14 @@ static void uart_event_task(void *pvParameters)
                     break;
             }
         }
+        vTaskDelay(100/portTICK_PERIOD_MS);
     }
     free(dtmp);
     dtmp = NULL;
     vTaskDelete(NULL);
 }
 
+#ifdef _MODE_MAIN_
 void app_main(void)
 {
     pins_init();
@@ -248,5 +298,6 @@ void app_main(void)
 
     //Create a task to handler UART event from ISR
     xTaskCreate(uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
-    // xTaskCreate(ble_config_task, "ble_config_task", 2048, NULL, 05, NULL);
+    xTaskCreate(iniciar_simulador, "iniciar simulador", 2048, NULL, 5, NULL);
 }
+#endif
