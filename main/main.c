@@ -23,14 +23,14 @@ static const char *TAG = "uart_events";
  * - Pin assignment: TxD (default), RxD (default)
  */
 
-#define EX_UART_NUM UART_NUM_1
+#define EX_UART_NUM UART_NUM_2
 #define PATTERN_CHR_NUM    (1)         /*!< Set the number of consecutive and identical characters received by receiver which defines a UART pattern*/
 
 #define BUF_SIZE (1024)
 #define RD_BUF_SIZE (BUF_SIZE)
 
-#define TXD_PIN (GPIO_NUM_4)
-#define RXD_PIN (GPIO_NUM_5)
+#define TXD_PIN (GPIO_NUM_19)
+#define RXD_PIN (GPIO_NUM_18)
 
 #define GPIO_BLE_VSOURCE        GPIO_NUM_23
 #define GPIO_OUTPUT_PIN_SEL     (1ULL<<GPIO_BLE_VSOURCE) 
@@ -88,7 +88,7 @@ void uart_init(void)
     uart_set_pin(UART_NUM_1, TXD_PIN, RXD_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     //Set uart pattern detect function.
-    uart_enable_pattern_det_baud_intr(EX_UART_NUM, '\r', PATTERN_CHR_NUM, 9, 0, 0);
+    uart_enable_pattern_det_baud_intr(EX_UART_NUM, '\n', PATTERN_CHR_NUM, 9, 0, 0);
     //Reset the pattern queue length to record at most 20 pattern positions.
     uart_pattern_queue_reset(EX_UART_NUM, 20);
 }
@@ -124,21 +124,18 @@ uint8_t ble_mesh_parse(const char* data)
 
     if( tokenHeader != NULL)
     {
-        ble_msg_rx_t* p_rx_data = (ble_msg_rx_t*)data;
+        ble_msg_t* p_rx_data = (ble_msg_t*)data;
 
-        if(p_rx_data->endWord[0] == 0x0d)
-        {
-            printf("MsgBLE:\r\n");
+        printf("MsgBLE:\r\n");
 
-            msg_sens_cmd = p_rx_data->cmd ;
+        msg_sens_cmd = (ble_cmd_t)p_rx_data->payload[0] ;
 
-            msg_address_sender = p_rx_data->send_addr;
+        msg_address_sender = p_rx_data->send_addr;
 
-            msg_battery = p_rx_data->battery;
+        msg_battery = (p_rx_data->payload[4]);
 
-            printf("%d\r\n%d\r\n", msg_sens_cmd, msg_battery);
-        
-        }
+        printf("%d\r\n%d\r\n", msg_sens_cmd, msg_battery);
+    
 
         switch( msg_sens_cmd )
         {
